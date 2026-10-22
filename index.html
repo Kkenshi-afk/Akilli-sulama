@@ -27,12 +27,12 @@ pre{background:var(--bg);border:1px solid var(--ln);padding:8px;border-radius:6p
 .note{font-size:12px;color:var(--mu)}
 </style></head><body>
 <h1>💧 Akıllı Sulama: 12 saatlik nem tahmini ve sulama kararı</h1>
-<p class="sub">Prototip. Çalışan: ET0 (FAO-56) hesabı, tarayıcıda eğitilen tahmin modeli, sulama kararı ve vana komutu. Simülasyon: sensör verisi (kendi verinizi yapıştırabilirsiniz).</p>
+<p class="sub">Prototip. Çalışan: ET0 (FAO-56) hesabı, tarayıcıda eğitilen tahmin modeli, sulama kararı ve vana komutu. Simülasyon: sensör verisi (kendi verinizi yapıştırabilirsiniz). Hava verisi canlı çekilebilir.</p>
 <div class="grid">
 <aside>
 <div class="card"><h2>Hava ve bitki</h2>
 <select id="pre"><option value="0">Temmuz sıcak hava dalgası (Adana)</option><option value="1">Mayıs ılıman</option><option value="2">Kasım serin (narenciye)</option></select>
-<label>Tmax °C<input type="number" id="tmax"></label><label>Tmin °C<input type="number" id="tmin"></label>
+<select id="wcity"><option value="37.0,35.32">Adana</option><option value="36.8,34.64">Mersin</option><option value="37.07,36.25">Osmaniye</option></select><button class="s" id="wbtn" style="width:100%;margin-bottom:4px">Canlı hava verisini çek</button><p class="note" id="wst">Elle girin ya da canlı veriyi çekin (Open-Meteo).</p><label>Tmax °C<input type="number" id="tmax"></label><label>Tmin °C<input type="number" id="tmin"></label>
 <label>Ort. nem %<input type="number" id="rh"></label><label>Rüzgâr m/s (2 m)<input type="number" id="u2" step=".1"></label>
 <label>Güneş MJ/m²/gün<input type="number" id="rs"></label><label>Yılın günü<input type="number" id="doy"></label>
 <label>Bitki katsayısı Kc<input type="number" id="kc" step=".05"></label><label>Şu anki saat<input type="number" id="hour" min="0" max="23" value="8"></label></div>
@@ -49,6 +49,17 @@ pre{background:var(--bg);border:1px solid var(--ln);padding:8px;border-radius:6p
 <div class="kp" id="kp"></div></div>
 <div class="card"><h2>Toprak nemi: geçmiş ve 12 saatlik tahmin</h2><div id="ch"></div>
 <div class="lg"><span style="color:var(--tx)">━ Sensör</span><span style="color:var(--g)">━ YZ tahmini</span><span>┅ Baz model (yalnız ET0×Kc)</span><span style="color:var(--b)">━ Sulama sonrası</span><span style="color:var(--r)">┅ Kritik eşik</span></div></div>
+<div class="card"><h2>Çiftçi için açıklama</h2><p id="exp" style="margin:0 0 6px"></p><p class="note">Bu metin, modelin ürettiği sayılardan otomatik oluşturulur (kural tabanlı). Gemini ile serbest açıklama sonraki sürümde planlanıyor.</p></div>
+<div class="card"><h2>Etki paneli: mevcut uygulama ile sistem</h2>
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:2px 14px">
+<label>Yıllık net ihtiyaç mm<input class="imp" type="number" id="iN" value="600"></label>
+<label>Mevcut randıman %<input class="imp" type="number" id="iE0" value="50"></label>
+<label>Hedef randıman %<input class="imp" type="number" id="iE1" value="60"></label>
+<label>Pompa yüksekliği m<input class="imp" type="number" id="iH" value="60"></label>
+<label>Pompa verimi %<input class="imp" type="number" id="iP" value="50"></label>
+<label>Alan (ha)<input class="imp" type="number" id="iA" value="100"></label></div>
+<div id="imp" style="margin-top:8px"></div>
+<p class="note">Varsayıma dayalı hedef hesabıdır, ölçüm değildir. Mevcut randıman: Türkiye ortalaması (yaklaşık %50). Gerçek değerler pilotta kontrol parseliyle ölçülecek.</p></div>
 <div class="card"><h2>Model doğrulaması (geriye dönük test)</h2><div id="bt"></div><p class="note" id="why"></p></div>
 <div class="card"><h2>Vana komutu</h2><div id="vc"></div><pre id="cmd">Henüz komut yok.</pre></div>
 </main></div>
@@ -103,7 +114,7 @@ $("bt").innerHTML=`<div class="kp"><div class="k"><span>Test pencereleri</span><
 $("why").textContent="Model, ilk bölümde eğitilip sonraki pencerelerde test edilir. Simülasyon verisinde toprak parametreleri gizli tutulur (gerçekte de bilinmez); bu sonuç mekanizmayı gösterir, gerçek tarla başarısı sayılmaz.";
 let pA=null;if(applied){const s0=applied.st,add=applied.mm/Z*100;pA=pML.map((v,k)=>k>=s0?Math.min(fc,v+add):v);}
 chart(th,pML,pB,pA,thr,fc,pw,N);
-$("vc").innerHTML=applied?`<b>Komut gönderildi (simülasyon):</b> ${applied.st==0?"şimdi":applied.st+" saat sonra"} aç, ${f1(applied.dur)} saat.`:(st!==null?`<button id="ap">Öneriyi uygula (vanayı aç)</button> <span class="note">Gerçek sistemde bu komut MQTT ile röleye gider.</span>`:"Vana komutu gerekmiyor.");
+ex({now,p12:pML[12],thr,E,ETc,hc,st,mm,dur,mlE,bsE});$("vc").innerHTML=applied?`<b>Komut gönderildi (simülasyon):</b> ${applied.st==0?"şimdi":applied.st+" saat sonra"} aç, ${f1(applied.dur)} saat.`:(st!==null?`<button id="ap">Öneriyi uygula (vanayı aç)</button> <span class="note">Gerçek sistemde bu komut MQTT ile röleye gider.</span>`:"Vana komutu gerekmiyor.");
 if(applied)$("cmd").textContent=JSON.stringify({topic:"parsel1/vana1/cmd",state:"ON",start_in_h:applied.st,minutes:Math.round(applied.dur*60),max_minutes:Math.round(applied.dur*60*1.2)},null,1);
 const ap=$("ap");if(ap)ap.onclick=()=>{applied={mm:dec.mm,dur:dec.dur,st:dec.st};run(true);};}
 function chart(th,pM,pB,pA,thr,fc,pw,N){const W=760,H=300,L=40,R=10,T=10,B=26,x0=-(N-1),x1=12;
@@ -114,9 +125,29 @@ const hl=(v,c,t)=>`<line x1="${L}" x2="${W-R}" y1="${Y(v)}" y2="${Y(v)}" stroke=
 let g="";for(let v=lo;v<=hi;v+=Math.ceil((hi-lo)/6))g+=`<text x="${L-6}" y="${Y(v)+4}" font-size="11" text-anchor="end" fill="var(--mu)">${v}</text>`;
 for(let h=-Math.floor((N-1)/24)*24;h<=12;h+=24)g+=`<text x="${X(h)}" y="${H-8}" font-size="11" text-anchor="middle" fill="var(--mu)">${h==0?"şimdi":h+" sa"}</text>`;
 $("ch").innerHTML=`<svg viewBox="0 0 ${W} ${H}">${g}${hl(fc,"var(--mu)","tarla kapasitesi")}${hl(pw,"var(--mu)","solma noktası")}${hl(thr,"var(--r)","kritik eşik")}<line x1="${X(0)}" x2="${X(0)}" y1="${T}" y2="${H-B}" stroke="var(--ln)"/>${pl(th,x0,"var(--tx)",1.6)}${pl(pB,0,"var(--mu)",2,1)}${pl(pM,0,"var(--g)",3)}${pA?pl(pA,0,"var(--b)",3):""}</svg>`;}
-document.querySelectorAll("input").forEach(e=>e.addEventListener("input",()=>run(false)));
+document.querySelectorAll("input:not(.imp)").forEach(e=>e.addEventListener("input",()=>run(false)));
 $("pre").onchange=()=>{setPre();run(false);};
 $("useCsv").onclick=()=>{const v=$("csv").value.split(/[\s,;]+/).map(parseFloat).filter(x=>!isNaN(x));if(v.length<30){alert("En az 30 değer gerekli.");return;}custom=v.slice(-96);run(false);};
 $("useSim").onclick=()=>{custom=null;run(false);};
-setPre();run(false);
+function ex(o){const kc=num("kc");let t=`Şu an toprak neminiz %${f1(o.now)}. Bugünkü hava koşullarında bitkiniz günde yaklaşık ${f1(o.ETc)} mm su tüketiyor (ET0 ${f1(o.E)} mm × bitki katsayısı ${kc}). Model, 12 saat sonra nemin yaklaşık %${f1(o.p12)} olacağını tahmin ediyor; bu parsel için kritik eşik %${f1(o.thr)}. `;
+if(o.hc===null)t+="Nemin eşiğin altına inmesi beklenmediği için şimdilik sulamaya gerek yok.";
+else if(o.st===0)t+=`Nemin yaklaşık ${o.hc} saat içinde eşiğe ulaşması bekleniyor, bu yüzden şimdi sulamanızı öneriyorum: yaklaşık ${f1(o.mm)} mm su, ${f1(o.dur)} saat damla sulama.`;
+else t+=`Eşiğe ulaşmadan önce ucuz elektrik tarifesine girileceği için, ${o.st} saat sonra başlayıp yaklaşık ${f1(o.mm)} mm (${f1(o.dur)} saat) sulamanızı öneriyorum.`;
+if(o.bsE>0)t+=` Geriye dönük testte bu model, yalnızca ET0'a dayanan baz modele göre hatayı yaklaşık %${f1((1-o.mlE/o.bsE)*100)} azalttı (simülasyon verisinde).`;
+$("exp").textContent=t;}
+function impact(){const v=id=>parseFloat($(id).value),N=v("iN"),e0=v("iE0")/100,e1=v("iE1")/100,H=v("iH"),P=v("iP")/100,A=v("iA");
+if([N,e0,e1,H,P,A].some(x=>isNaN(x)||x<=0)||e1<=e0){$("imp").textContent="Hedef randıman, mevcut randımandan büyük olmalı ve tüm değerler pozitif olmalı.";return;}
+const W0=N/e0*10,W1=N/e1*10,sv=W0-W1,k=H*9.81/3600/P,ek=sv*k,fm=x=>Math.round(x).toLocaleString("tr-TR");
+$("imp").innerHTML=`<div class="kp"><div class="k"><span>Mevcut uygulama</span><b>${fm(W0)} m³/ha</b></div><div class="k"><span>Sistemle</span><b>${fm(W1)} m³/ha</b></div><div class="k"><span>Su tasarrufu</span><b>${fm(sv)} m³/ha (%${f1(sv/W0*100)})</b></div><div class="k"><span>Enerji tasarrufu</span><b>${fm(ek)} kWh/ha</b></div></div>
+<div style="margin:8px 0 2px;font-size:12px;color:var(--mu)">Yıllık uygulanan su (kıyas)</div><div style="background:var(--ln);border-radius:4px;height:14px"><div style="background:var(--r);width:100%;height:14px;border-radius:4px"></div></div><div style="background:var(--ln);border-radius:4px;height:14px;margin-top:4px"><div style="background:var(--g);width:${(W1/W0*100).toFixed(1)}%;height:14px;border-radius:4px"></div></div>
+<p style="margin:8px 0 0"><b>${A} ha</b> için: yaklaşık <b>${fm(sv*A)} m³</b> su ve <b>${fm(ek*A)} kWh</b> enerji tasarrufu (yılda).</p>`;}
+async function getW(){const c=$("wcity").value.split(",");$("wst").textContent="Veri alınıyor…";
+try{const u=`https://api.open-meteo.com/v1/forecast?latitude=${c[0]}&longitude=${c[1]}&daily=temperature_2m_max,temperature_2m_min,relative_humidity_2m_mean,wind_speed_10m_mean,shortwave_radiation_sum,et0_fao_evapotranspiration&wind_speed_unit=ms&timezone=auto&forecast_days=1`;
+const r=await fetch(u);if(!r.ok)throw 0;const d=(await r.json()).daily,g=k=>d[k]&&d[k][0],set=(id,x)=>{if(x!=null&&!isNaN(x))$(id).value=+x.toFixed(1)};
+set("tmax",g("temperature_2m_max"));set("tmin",g("temperature_2m_min"));set("rh",g("relative_humidity_2m_mean"));const w=g("wind_speed_10m_mean");if(w!=null)set("u2",w*.748);set("rs",g("shortwave_radiation_sum"));
+const t=new Date(d.time[0]);set("doy",Math.round((t-new Date(t.getFullYear(),0,0))/864e5));run(false);
+const o=g("et0_fao_evapotranspiration");$("wst").textContent="Güncellendi ("+d.time[0]+"). Bizim ET0: "+f1(et0())+" mm"+(o!=null?"; Open-Meteo ET0: "+f1(o)+" mm":"")+".";}
+catch(e){$("wst").textContent="Hava verisi alınamadı; elle girilen değerlerle devam ediliyor.";}}
+document.querySelectorAll(".imp").forEach(e=>e.addEventListener("input",impact));$("wbtn").onclick=getW;
+setPre();run(false);impact();
 </script></body></html>
